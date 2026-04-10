@@ -183,7 +183,9 @@ func sendOnSearch(bapURI string, catalog ONDCCatalog, req ONDCSearchRequest) err
 
 
 // transformToONDCSelectResponse converts the Shopify response into an ONDC select response.
-func transformToONDCSelectResponse(req ONDCSelectRequest, shopifyResp ShopifyResponse) ONDCSelectResponse {
+// transformToONDCCSelectResponse converts the Shopify response into an ONDC select response.
+// transformToONDCCSelectResponse converts the Shopify response into an ONDC select response.
+func transformToONDCCSelectResponse(req ONDCSelectRequest, shopifyResp ShopifyResponse) ONDCSelectResponse {
 	response := ONDCSelectResponse{
 		Context: ONDCContext{
 			Domain:        "ONDC:RET11",
@@ -267,6 +269,58 @@ func transformToONDCSelectResponse(req ONDCSelectRequest, shopifyResp ShopifyRes
 		}
 		response.Message.Order.Items = append(response.Message.Order.Items, item)
 	}
+
+	// Process offers if available.
+	var totalOfferDiscount float64
+	// Initialize the quote breakup slice if not already.
+	response.Message.Order.Quote.Breakup = []struct {
+		Title string `json:"title"`
+		Price struct {
+			Currency string `json:"currency"`
+			Value    string `json:"value"`
+		} `json:"price"`
+	}{}
+	
+	// Get discount percentage from environment
+	discountPercentStr := os.Getenv("OFFER_DISCOUNT")
+	if discountPercentStr == "" {
+		discountPercentStr = "10.00" // Default 10% discount
+	}
+	discountPercent, err := strconv.ParseFloat(discountPercentStr, 64)
+	if err != nil {
+		discountPercent = 10.0 // Default to 10% if parsing fails
+	}
+
+	for _, offer := range req.Message.Order.Offers {
+		for _, tag := range offer.Tags {
+			for _, tagItem := range tag.List {
+				if tagItem.Code == "apply" && tagItem.Value == "yes" {
+					// Calculate discount amount based on percentage of total value
+					discount := (totalValue * discountPercent) / 100.0
+					totalOfferDiscount += discount
+
+					// Append offer breakup line.
+					response.Message.Order.Quote.Breakup = append(response.Message.Order.Quote.Breakup, struct {
+						Title string `json:"title"`
+						Price struct {
+							Currency string `json:"currency"`
+							Value    string `json:"value"`
+						} `json:"price"`
+					}{
+						Title: fmt.Sprintf("Offer - %s (%g%%)", offer.ID, discountPercent),
+						Price: struct {
+							Currency string `json:"currency"`
+							Value    string `json:"value"`
+						}{
+							Currency: "INR",
+							Value:    fmt.Sprintf("-%.2f", discount),
+						},
+					})
+				}
+			}
+		}
+	}
+	totalValue -= totalOfferDiscount
 
 	// Get delivery fee from configuration.
 	deliveryFeeStr := os.Getenv("DELIVERY_FEE")
@@ -403,217 +457,337 @@ func sendOnSelect(bapURI string, response ONDCSelectResponse, req ONDCSelectRequ
     return nil
 }
 
-// transformToONDCInitResponse converts the /init request into an /on_init response.
-func transformToONDCInitResponse(req ONDCInitRequest) ONDCInitResponse {
-    return ONDCInitResponse{
-        Context: ONDCContext{
-            Domain:        req.Context.Domain,
-            Action:        "on_init",
-            CoreVersion:   req.Context.CoreVersion,
-            BapID:         req.Context.BapID,
-            BapURI:        req.Context.BapURI,
-            BppID:         req.Context.BppID,
-            BppURI:        req.Context.BppURI,
-            TransactionID: req.Context.TransactionID,
-            MessageID:     req.Context.MessageID,
-            City:          req.Context.City,
-            Country:       req.Context.Country,
-            Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-        },
-        Message: struct {
-            Order struct {
-                Provider struct {
-                    ID        string   `json:"id"`
-                    Locations []struct {
-                        ID string `json:"id"`
-                    } `json:"locations"`
-                } `json:"provider"`
-                Items []struct {
-                    ID       string `json:"id"`
-                    Quantity struct {
-                        Available int `json:"available"`
-                        Maximum   int `json:"maximum"`
-                    } `json:"quantity"`
-                    Price struct {
-                        Currency string `json:"currency"`
-                        Value    string `json:"value"`
-                    } `json:"price"`
-                } `json:"items"`
-                Payment struct {
-                    Type   string `json:"type"`
-                    Status string `json:"status"`
-                } `json:"payment"`
-                Fulfillments []struct {
-                    ID            string `json:"id"`
-                    Type          string `json:"type"`
-                    ProviderName  string `json:"@ondc/org/provider_name"`
-                    Tracking      bool   `json:"tracking"`
-                    Category      string `json:"@ondc/org/category"`
-                    TAT           string `json:"@ondc/org/TAT"`
-                    Price         struct {
-                        Currency string `json:"currency"`
-                        Value    string `json:"value"`
-                    } `json:"price"`
-                    State struct {
-                        Descriptor struct {
-                            Code string `json:"code"`
-                        } `json:"descriptor"`
-                    } `json:"state"`
-                } `json:"fulfillments"`
-                Terms struct {
-                    StaticTerms   string `json:"static_terms"`
-                    EffectiveDate string `json:"effective_date"`
-                } `json:"terms"`
-            } `json:"order"`
-        }{
-            Order: struct {
-                Provider struct {
-                    ID        string   `json:"id"`
-                    Locations []struct {
-                        ID string `json:"id"`
-                    } `json:"locations"`
-                } `json:"provider"`
-                Items []struct {
-                    ID       string `json:"id"`
-                    Quantity struct {
-                        Available int `json:"available"`
-                        Maximum   int `json:"maximum"`
-                    } `json:"quantity"`
-                    Price struct {
-                        Currency string `json:"currency"`
-                        Value    string `json:"value"`
-                    } `json:"price"`
-                } `json:"items"`
-                Payment struct {
-                    Type   string `json:"type"`
-                    Status string `json:"status"`
-                } `json:"payment"`
-                Fulfillments []struct {
-                    ID            string `json:"id"`
-                    Type          string `json:"type"`
-                    ProviderName  string `json:"@ondc/org/provider_name"`
-                    Tracking      bool   `json:"tracking"`
-                    Category      string `json:"@ondc/org/category"`
-                    TAT           string `json:"@ondc/org/TAT"`
-                    Price         struct {
-                        Currency string `json:"currency"`
-                        Value    string `json:"value"`
-                    } `json:"price"`
-                    State struct {
-                        Descriptor struct {
-                            Code string `json:"code"`
-                        } `json:"descriptor"`
-                    } `json:"state"`
-                } `json:"fulfillments"`
-                Terms struct {
-                    StaticTerms   string `json:"static_terms"`
-                    EffectiveDate string `json:"effective_date"`
-                } `json:"terms"`
-            }{
-                Provider: struct {
-                    ID        string   `json:"id"`
-                    Locations []struct {
-                        ID string `json:"id"`
-                    } `json:"locations"`
-                }{
-                    ID: "P1",
-                    Locations: []struct {
-                        ID string `json:"id"`
-                    }{
-                        {ID: "L1"},
-                    },
-                },
-                Items: []struct {
-                    ID       string `json:"id"`
-                    Quantity struct {
-                        Available int `json:"available"`
-                        Maximum   int `json:"maximum"`
-                    } `json:"quantity"`
-                    Price struct {
-                        Currency string `json:"currency"`
-                        Value    string `json:"value"`
-                    } `json:"price"`
-                }{
-                    {
-                        ID: "I1",
-                        Quantity: struct {
-                            Available int `json:"available"`
-                            Maximum   int `json:"maximum"`
-                        }{
-                            Available: 10,
-                            Maximum:   5,
-                        },
-                        Price: struct {
-                            Currency string `json:"currency"`
-                            Value    string `json:"value"`
-                        }{
-                            Currency: "INR",
-                            Value:    "269.00",
-                        },
-                    },
-                },
-                Payment: struct {
-                    Type   string `json:"type"`
-                    Status string `json:"status"`
-                }{
-                    Type:   "ON-FULFILLMENT",
-                    Status: "Pending",
-                },
-                Fulfillments: []struct {
-                    ID            string `json:"id"`
-                    Type          string `json:"type"`
-                    ProviderName  string `json:"@ondc/org/provider_name"`
-                    Tracking      bool   `json:"tracking"`
-                    Category      string `json:"@ondc/org/category"`
-                    TAT           string `json:"@ondc/org/TAT"`
-                    Price         struct {
-                        Currency string `json:"currency"`
-                        Value    string `json:"value"`
-                    } `json:"price"`
-                    State struct {
-                        Descriptor struct {
-                            Code string `json:"code"`
-                        } `json:"descriptor"`
-                    } `json:"state"`
-                }{
-                    {
-                        ID:           "F1",
-                        Type:         "Delivery",
-                        ProviderName: "Seller NP Name",
-                        Tracking:     false,
-                        Category:     "Immediate Delivery",
-                        TAT:          "PT60M",
-                        Price: struct {
-                            Currency string `json:"currency"`
-                            Value    string `json:"value"`
-                        }{
-                            Currency: "INR",
-                            Value:    "30.00",
-                        },
-                        State: struct {
-                            Descriptor struct {
-                                Code string `json:"code"`
-                            } `json:"descriptor"`
-                        }{
-                            Descriptor: struct {
-                                Code string `json:"code"`
-                            }{
-                                Code: "Serviceable",
-                            },
-                        },
-                    },
-                },
-                Terms: struct {
-                    StaticTerms   string `json:"static_terms"`
-                    EffectiveDate string `json:"effective_date"`
-                }{
-                    StaticTerms:   "https://github.com/ONDC-Official/NP-Static-Terms/buyerNP_BNP/1.0/tc.pdf",
-                    EffectiveDate: "2023-10-01T00:00:00.000Z",
-                },
-            },
-        },
-    }
+
+
+// transformToONDCInitResponse constructs the /on_init response using selected Shopify product data.
+// It builds items, quote, billing, cancellation_terms, and a dynamic payment section.
+func transformToONDCInitResponse(req ONDCInitRequest, shopifyResp ShopifyResponse) ONDCInitResponse {
+	var response ONDCInitResponse
+
+	// Populate context.
+	response.Context = req.Context
+	response.Context.Action = "on_init"
+	response.Context.Timestamp = time.Now().UTC().Format(time.RFC3339)
+
+	// Provider details.
+	response.Message.Order.Provider.ID = "P1"
+	response.Message.Order.Provider.Locations = []struct {
+		ID string `json:"id"`
+	}{
+		{ID: "L1"},
+	}
+
+	// Prepare accumulators.
+	var totalProductPrice float64
+	response.Message.Order.Items = []struct {
+		ID            string `json:"id"`
+		FulfillmentID string `json:"fulfillment_id"`
+		Quantity      struct {
+			Count int `json:"count"`
+		} `json:"quantity"`
+		ParentItemID string `json:"parent_item_id"`
+		Tags         []struct {
+			Code string `json:"code"`
+			List []struct {
+				Code  string `json:"code"`
+				Value string `json:"value"`
+			} `json:"list"`
+		} `json:"tags"`
+	}{}
+
+	// Process each requested item by matching with Shopify product data.
+	for _, reqItem := range req.Message.Order.Items {
+		for _, productEdge := range shopifyResp.Data.Products.Edges {
+			// Here, reqItem.ID is expected to match the product meta tag value from Shopify.
+			if productEdge.Node.ID == reqItem.ID {
+				// Parse product price.
+				productPriceStr := productEdge.Node.Variants.Edges[0].Node.Price
+				productPrice, _ := strconv.ParseFloat(productPriceStr, 64)
+				quantity := reqItem.Quantity.Count
+				if quantity == 0 {
+					quantity = 1
+				}
+				totalProductPrice += productPrice * float64(quantity)
+
+				// Append order item using the dynamic product ID.
+				response.Message.Order.Items = append(response.Message.Order.Items, struct {
+					ID            string `json:"id"`
+					FulfillmentID string `json:"fulfillment_id"`
+					Quantity      struct {
+						Count int `json:"count"`
+					} `json:"quantity"`
+					ParentItemID string `json:"parent_item_id"`
+					Tags         []struct {
+						Code string `json:"code"`
+						List []struct {
+							Code  string `json:"code"`
+							Value string `json:"value"`
+						} `json:"list"`
+					} `json:"tags"`
+				}{
+					ID:            productEdge.Node.ID,
+					FulfillmentID: reqItem.FulfillmentID,
+					Quantity:      struct{ Count int `json:"count"` }{Count: quantity},
+					ParentItemID:  reqItem.ParentItemID,
+					Tags:          reqItem.Tags,
+				})
+			}
+		}
+	}
+
+	// Read delivery fee from environment (default to 100.00 if not set).
+	deliveryFeeStr := os.Getenv("DELIVERY_FEE")
+	if deliveryFeeStr == "" {
+		deliveryFeeStr = "100.00"
+	}
+	deliveryFee, err := strconv.ParseFloat(deliveryFeeStr, 64)
+	if err != nil {
+		deliveryFee = 100.0
+	}
+	totalOrderPrice := totalProductPrice + deliveryFee
+
+	// Build the quote breakup.
+	var quoteBreakup []struct {
+		ItemID       string `json:"@ondc/org/item_id"`
+		ItemQuantity struct {
+			Count int `json:"count"`
+		} `json:"@ondc/org/item_quantity"`
+		Title     string `json:"title"`
+		TitleType string `json:"@ondc/org/title_type"`
+		Price     struct {
+			Currency string `json:"currency"`
+			Value    string `json:"value"`
+		} `json:"price"`
+	}
+	for _, reqItem := range req.Message.Order.Items {
+		for _, productEdge := range shopifyResp.Data.Products.Edges {
+			if productEdge.Node.ID == reqItem.ID {
+				productPriceStr := productEdge.Node.Variants.Edges[0].Node.Price
+				productPrice, _ := strconv.ParseFloat(productPriceStr, 64)
+				quantity := reqItem.Quantity.Count
+				if quantity == 0 {
+					quantity = 1
+				}
+				quoteBreakup = append(quoteBreakup, struct {
+					ItemID       string `json:"@ondc/org/item_id"`
+					ItemQuantity struct {
+						Count int `json:"count"`
+					} `json:"@ondc/org/item_quantity"`
+					Title     string `json:"title"`
+					TitleType string `json:"@ondc/org/title_type"`
+					Price     struct {
+						Currency string `json:"currency"`
+						Value    string `json:"value"`
+					} `json:"price"`
+				}{
+					ItemID:       productEdge.Node.ID,
+					ItemQuantity: struct{ Count int `json:"count"` }{Count: quantity},
+					Title:        productEdge.Node.Title,
+					TitleType:    "item",
+					Price: struct {
+						Currency string `json:"currency"`
+						Value    string `json:"value"`
+					}{
+						Currency: "INR",
+						Value:    fmt.Sprintf("%.2f", productPrice*float64(quantity)),
+					},
+				})
+			}
+		}
+	}
+	// Append a breakup entry for delivery charges.
+	quoteBreakup = append(quoteBreakup, struct {
+		ItemID       string `json:"@ondc/org/item_id"`
+		ItemQuantity struct {
+			Count int `json:"count"`
+		} `json:"@ondc/org/item_quantity"`
+		Title     string `json:"title"`
+		TitleType string `json:"@ondc/org/title_type"`
+		Price     struct {
+			Currency string `json:"currency"`
+			Value    string `json:"value"`
+		} `json:"price"`
+	}{
+		ItemID:       "F1",
+		ItemQuantity: struct{ Count int `json:"count"` }{Count: 1},
+		Title:        "Delivery charges",
+		TitleType:    "delivery",
+		Price: struct {
+			Currency string `json:"currency"`
+			Value    string `json:"value"`
+		}{
+			Currency: "INR",
+			Value:    fmt.Sprintf("%.2f", deliveryFee),
+		},
+	})
+
+	// Build the overall Quote.
+	response.Message.Order.Quote = struct {
+		Price struct {
+			Currency string `json:"currency"`
+			Value    string `json:"value"`
+		} `json:"price"`
+		Breakup []struct {
+			ItemID       string `json:"@ondc/org/item_id"`
+			ItemQuantity struct {
+				Count int `json:"count"`
+			} `json:"@ondc/org/item_quantity"`
+			Title     string `json:"title"`
+			TitleType string `json:"@ondc/org/title_type"`
+			Price     struct {
+				Currency string `json:"currency"`
+				Value    string `json:"value"`
+			} `json:"price"`
+		} `json:"breakup"`
+	}{
+		Price: struct {
+			Currency string `json:"currency"`
+			Value    string `json:"value"`
+		}{
+			Currency: "INR",
+			Value:    fmt.Sprintf("%.2f", totalOrderPrice),
+		},
+		Breakup: quoteBreakup,
+	}
+
+	// Billing details: make email and phone dynamic.
+	billingEmail := os.Getenv("BILLING_EMAIL")
+	if billingEmail == "" {
+		billingEmail = "nobody@nomail.com"
+	}
+	billingPhone := os.Getenv("BILLING_PHONE")
+	if billingPhone == "" {
+		billingPhone = "9886098860"
+	}
+	// Address and name can remain static or be updated similarly.
+	response.Message.Order.Billing = struct {
+		Name    string `json:"name"`
+		Address struct {
+			Name     string `json:"name"`
+			Building string `json:"building"`
+			Locality string `json:"locality"`
+			City     string `json:"city"`
+			State    string `json:"state"`
+			Country  string `json:"country"`
+			AreaCode string `json:"area_code"`
+		} `json:"address"`
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+	}{
+		Name: "ONDC buyer",
+		Address: struct {
+			Name     string `json:"name"`
+			Building string `json:"building"`
+			Locality string `json:"locality"`
+			City     string `json:"city"`
+			State    string `json:"state"`
+			Country  string `json:"country"`
+			AreaCode string `json:"area_code"`
+		}{
+			Name:     "my house or door or floor #",
+			Building: "my building name or house #",
+			Locality: "my street name",
+			City:     "Bengaluru",
+			State:    "Karnataka",
+			Country:  "IND",
+			AreaCode: "560037",
+		},
+		Email: billingEmail,
+		Phone: billingPhone,
+	}
+
+	// Cancellation terms (static defaults).
+	response.Message.Order.CancellationTerms = []struct {
+		FulfillmentState struct {
+			Descriptor struct {
+				Code      string `json:"code"`
+				ShortDesc string `json:"short_desc"`
+			} `json:"descriptor"`
+		} `json:"fulfillment_state"`
+		CancellationFee struct {
+			Percentage string `json:"percentage"`
+			Amount     struct {
+				Currency string `json:"currency"`
+				Value    string `json:"value"`
+			} `json:"amount"`
+		} `json:"cancellation_fee"`
+	}{
+		{
+			FulfillmentState: struct {
+				Descriptor struct {
+					Code      string `json:"code"`
+					ShortDesc string `json:"short_desc"`
+				} `json:"descriptor"`
+			}{
+				Descriptor: struct {
+					Code      string `json:"code"`
+					ShortDesc string `json:"short_desc"`
+				}{
+					Code:      "Pending",
+					ShortDesc: "002",
+				},
+			},
+			CancellationFee: struct {
+				Percentage string `json:"percentage"`
+				Amount     struct {
+					Currency string `json:"currency"`
+					Value    string `json:"value"`
+				} `json:"amount"`
+			}{
+				Percentage: "0.00",
+				Amount: struct {
+					Currency string `json:"currency"`
+					Value    string `json:"value"`
+				}{
+					Currency: "INR",
+					Value:    "0.00",
+				},
+			},
+		},
+	}
+
+	// Payment: Build dynamically using environment variables.
+	response.Message.Order.Payment = struct {
+		Uri                      string `json:"uri"`
+		BuyerAppFinderFeeType    string `json:"@ondc/org/buyer_app_finder_fee_type"`
+		BuyerAppFinderFeeAmount  string `json:"@ondc/org/buyer_app_finder_fee_amount"`
+		WithholdingAmount        string `json:"@ondc/org/withholding_amount"`
+		Tags                     []struct {
+			Code string `json:"code"`
+			List []struct {
+				Code  string `json:"code"`
+				Value string `json:"value"`
+			} `json:"list"`
+		} `json:"tags"`
+	}{
+		Uri:                     os.Getenv("PAYMENT_URI"),                     // e.g., "https://snp.com/pg"
+		BuyerAppFinderFeeType:   os.Getenv("BUYER_APP_FINDER_FEE_TYPE"),       // e.g., "percent"
+		BuyerAppFinderFeeAmount: os.Getenv("BUYER_APP_FINDER_FEE_AMOUNT"),     // e.g., "3"
+		WithholdingAmount:       os.Getenv("WITHHOLDING_AMOUNT"),              // e.g., "10.00"
+		Tags: []struct {
+			Code string `json:"code"`
+			List []struct {
+				Code  string `json:"code"`
+				Value string `json:"value"`
+			} `json:"list"`
+		}{
+			{
+				Code: "bpp_collect",
+				List: []struct {
+					Code  string `json:"code"`
+					Value string `json:"value"`
+				}{
+					{Code: "success", Value: os.Getenv("BPP_COLLECT_SUCCESS")}, // e.g., "Y"
+					{Code: "error", Value: os.Getenv("BPP_COLLECT_ERROR")},     // e.g., ".."
+				},
+			},
+		},
+	}
+
+	return response
 }
+
+
 
 // sendOnInit sends the ONDC on_init response to the BAP's on_init endpoint.
 func sendOnInit(bapURI string, response ONDCInitResponse, req ONDCInitRequest) error {

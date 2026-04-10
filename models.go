@@ -130,37 +130,42 @@ type ONDCTagItem struct {
 }
 
 type ONDCSelectRequest struct {
-    Context ONDCContext `json:"context"`
-    Message struct {
-        Order struct {
-            Items []struct {
-                ID            string `json:"id"`
-                ParentItemID string `json:"parent_item_id"`
-                LocationID   string `json:"location_id"`
-                Quantity     struct {
-                    Count int `json:"count"`
-                } `json:"quantity"`
-                Tags []ONDCTag `json:"tags"`
-            } `json:"items"`
-            Offers []struct {
-                ID   string    `json:"id"`
-                Tags []ONDCTag `json:"tags"`
-            } `json:"offers"`
-            Fulfillments []struct {
-                End struct {
-                    Location struct {
-                        GPS     string `json:"gps"`
-                        Address struct {
-                            AreaCode string `json:"area_code"`
-                        } `json:"address"`
-                    } `json:"location"`
-                } `json:"end"`
-            } `json:"fulfillments"`
-            Payment struct {
-                Type string `json:"type"`
-            } `json:"payment"`
-        } `json:"order"`
-    } `json:"message"`
+	Context ONDCContext `json:"context"`
+	Message struct {
+		Intent struct {
+			Category struct {
+				ID string `json:"id"`
+			} `json:"category"`
+		} `json:"intent"`
+		Order struct {
+			Items []struct {
+				ID           string   `json:"id"`
+				ParentItemID string   `json:"parent_item_id"`
+				LocationID   string   `json:"location_id"`
+				Quantity     struct {
+					Count int `json:"count"`
+				} `json:"quantity"`
+				Tags []ONDCTag `json:"tags"`
+			} `json:"items"`
+			Offers []struct {
+				ID   string    `json:"id"`
+				Tags []ONDCTag `json:"tags"`
+			} `json:"offers"`
+			Fulfillments []struct {
+				End struct {
+					Location struct {
+						GPS     string `json:"gps"`
+						Address struct {
+							AreaCode string `json:"area_code"`
+						} `json:"address"`
+					} `json:"location"`
+				} `json:"end"`
+			} `json:"fulfillments"`
+			Payment struct {
+				Type string `json:"type"`
+			} `json:"payment"`
+		} `json:"order"`
+	} `json:"message"`
 }
 
 type ONDCSelectResponse struct {
@@ -225,85 +230,136 @@ type ONDCSelectResponse struct {
 
 
 // ONDCInitRequest represents the /init request payload.
+
+
 type ONDCInitRequest struct {
-    Context ONDCContext `json:"context"`
-    Message struct {
-        Order struct {
-            Provider struct {
-                ID        string `json:"id"`
-                Locations []struct {
-                    ID string `json:"id"`
-                } `json:"locations"`
-            } `json:"provider"`
-            Items []struct {
-                ID       string `json:"id"`
-                Quantity struct {
-                    Count int `json:"count"`
-                } `json:"quantity"`
-            } `json:"items"`
-            Payment struct {
-                Type string `json:"type"`
-            } `json:"payment"`
-            Fulfillments []struct {
-                ID   string `json:"id"`
-                Type string `json:"type"`
-            } `json:"fulfillments"`
-            Terms struct {
-                StaticTerms   string `json:"static_terms"`
-                EffectiveDate string `json:"effective_date"`
-            } `json:"terms"`
-        } `json:"order"`
-    } `json:"message"`
+	Context ONDCContext `json:"context"`
+	Message struct {
+		Order struct {
+			Provider struct {
+				ID        string `json:"id"`
+				Locations []struct {
+					ID string `json:"id"`
+				} `json:"locations"`
+			} `json:"provider"`
+			Items []struct {
+				// Now the item ID is expected to match the meta tag value from Shopify.
+				ID            string `json:"id"`
+				FulfillmentID string `json:"fulfillment_id"`
+				Quantity      struct {
+					Count int `json:"count"`
+				} `json:"quantity"`
+				ParentItemID string `json:"parent_item_id"`
+				Tags         []struct {
+					Code string `json:"code"`
+					List []struct {
+						Code  string `json:"code"`
+						Value string `json:"value"`
+					} `json:"list"`
+				} `json:"tags"`
+			} `json:"items"`
+			Payment struct {
+				Type string `json:"type"`
+			} `json:"payment"`
+			Fulfillments []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			} `json:"fulfillments"`
+			Terms struct {
+				StaticTerms   string `json:"static_terms"`
+				EffectiveDate string `json:"effective_date"`
+			} `json:"terms"`
+		} `json:"order"`
+	} `json:"message"`
 }
 
-// ONDCInitResponse represents the /on_init response payload.
+// Updated ONDCInitResponse to include billing, quote, cancellation_terms, etc.
+// Updated ONDCInitResponse to reflect the new Payment struct.
 type ONDCInitResponse struct {
-    Context ONDCContext `json:"context"`
-    Message struct {
-        Order struct {
-            Provider struct {
-                ID        string `json:"id"`
-                Locations []struct {
-                    ID string `json:"id"`
-                } `json:"locations"`
-            } `json:"provider"`
-            Items []struct {
-                ID       string `json:"id"`
-                Quantity struct {
-                    Available int `json:"available"`
-                    Maximum   int `json:"maximum"`
-                } `json:"quantity"`
-                Price struct {
-                    Currency string `json:"currency"`
-                    Value    string `json:"value"`
-                } `json:"price"`
-            } `json:"items"`
-            Payment struct {
-                Type   string `json:"type"`
-                Status string `json:"status"`
-            } `json:"payment"`
-            Fulfillments []struct {
-                ID           string `json:"id"`
-                Type         string `json:"type"`
-                ProviderName string `json:"@ondc/org/provider_name"`
-                Tracking     bool   `json:"tracking"`
-                Category     string `json:"@ondc/org/category"`
-                TAT          string `json:"@ondc/org/TAT"`
-                Price        struct {
-                    Currency string `json:"currency"`
-                    Value    string `json:"value"`
-                } `json:"price"`
-                State struct {
-                    Descriptor struct {
-                        Code string `json:"code"`
-                    } `json:"descriptor"`
-                } `json:"state"`
-            } `json:"fulfillments"`
-            Terms struct {
-                StaticTerms   string `json:"static_terms"`
-                EffectiveDate string `json:"effective_date"`
-            } `json:"terms"`
-        } `json:"order"`
-    } `json:"message"`
+	Context ONDCContext `json:"context"`
+	Message struct {
+		Order struct {
+			Provider struct {
+				ID        string `json:"id"`
+				Locations []struct {
+					ID string `json:"id"`
+				} `json:"locations"`
+			} `json:"provider"`
+			Items []struct {
+				ID            string `json:"id"`
+				FulfillmentID string `json:"fulfillment_id"`
+				Quantity      struct {
+					Count int `json:"count"`
+				} `json:"quantity"`
+				ParentItemID string `json:"parent_item_id"`
+				Tags         []struct {
+					Code string `json:"code"`
+					List []struct {
+						Code  string `json:"code"`
+						Value string `json:"value"`
+					} `json:"list"`
+				} `json:"tags"`
+			} `json:"items"`
+			Billing struct {
+				Name    string `json:"name"`
+				Address struct {
+					Name     string `json:"name"`
+					Building string `json:"building"`
+					Locality string `json:"locality"`
+					City     string `json:"city"`
+					State    string `json:"state"`
+					Country  string `json:"country"`
+					AreaCode string `json:"area_code"`
+				} `json:"address"`
+				Email string `json:"email"`
+				Phone string `json:"phone"`
+			} `json:"billing"`
+			Quote struct {
+				Price struct {
+					Currency string `json:"currency"`
+					Value    string `json:"value"`
+				} `json:"price"`
+				Breakup []struct {
+					ItemID       string `json:"@ondc/org/item_id"`
+					ItemQuantity struct {
+						Count int `json:"count"`
+					} `json:"@ondc/org/item_quantity"`
+					Title     string `json:"title"`
+					TitleType string `json:"@ondc/org/title_type"`
+					Price     struct {
+						Currency string `json:"currency"`
+						Value    string `json:"value"`
+					} `json:"price"`
+				} `json:"breakup"`
+			} `json:"quote"`
+			CancellationTerms []struct {
+				FulfillmentState struct {
+					Descriptor struct {
+						Code      string `json:"code"`
+						ShortDesc string `json:"short_desc"`
+					} `json:"descriptor"`
+				} `json:"fulfillment_state"`
+				CancellationFee struct {
+					Percentage string `json:"percentage"`
+					Amount     struct {
+						Currency string `json:"currency"`
+						Value    string `json:"value"`
+					} `json:"amount"`
+				} `json:"cancellation_fee"`
+			} `json:"cancellation_terms"`
+			Payment struct {
+				Uri                      string `json:"uri"`
+				BuyerAppFinderFeeType    string `json:"@ondc/org/buyer_app_finder_fee_type"`
+				BuyerAppFinderFeeAmount  string `json:"@ondc/org/buyer_app_finder_fee_amount"`
+				WithholdingAmount        string `json:"@ondc/org/withholding_amount"`
+				Tags                     []struct {
+					Code string `json:"code"`
+					List []struct {
+						Code  string `json:"code"`
+						Value string `json:"value"`
+					} `json:"list"`
+				} `json:"tags"`
+			} `json:"payment"`
+		} `json:"order"`
+	} `json:"message"`
 }
-
